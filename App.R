@@ -10,21 +10,8 @@ library(shinyBS)
 library(reticulate)
 
 
-#lapply(names(sessionInfo()$otherPkgs), function(pkg) detach(paste0("package:", pkg), character.only = TRUE, unload = TRUE))
-#packages <- c("shiny", "shinydashboard", "dplyr", "plotly", "DT", "shinyjs", "shinyBS", "reticulate")
 
-# Install missing packages
-#new_packages <- packages[!(packages %in% installed.packages()[,"Package"])]
-#if(length(new_packages)) install.packages(new_packages)
 
-# Load all packages
-#lapply(packages, library, character.only = TRUE)
-
-# Reinstall necessary packages
-#install.packages(c("shiny", "rsconnect", "renv"))
-
-# If you're using other packages in your app, install them here as well
-# install.packages(c("dplyr", "ggplot2", "etc"))
 
 # Try deploying again
 library(rsconnect)
