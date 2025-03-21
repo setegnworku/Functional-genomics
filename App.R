@@ -1,4 +1,7 @@
 # Load required libraries
+#install.packages("gridExtra")
+library(gridExtra)
+
 library(shiny)
 if (!require(shinydashboard)) install.packages("shinydashboard")
 library(shinydashboard)
@@ -10,14 +13,7 @@ library(shinyBS)
 library(reticulate)
 
 
-
-
-
-# Try deploying again
 library(rsconnect)
-#deployApp(appDir = "~/LIC/Shinyapp/Version3/For_GSE", 
-#      appName = "Functional_genomics",
-#   account = "setegn")
 
 
 # Define SNP groups
@@ -97,7 +93,9 @@ ui <- dashboardPage(
       menuItem("Grouped Visualization", tabName = "groupedVisualization", icon = icon("object-group")),
       menuItem("Results Table", tabName = "resultsTable", icon = icon("table")),
       menuItem("Functional Variants", tabName = "functionalVariants", icon = icon("dna")),
-      menuItem("Study Summary & Audio Guide", tabName = "studySummary", icon = icon("book-reader"))
+      menuItem("Study Summary & Audio Guide", tabName = "studySummary", icon = icon("book-reader")),
+      menuItem("How to Use the App", tabName = "howToUse", icon = icon("question-circle"))
+      
     )
   ),
   dashboardBody(
@@ -274,6 +272,32 @@ ui <- dashboardPage(
                     )
                 )
               )
+      ),
+      
+      
+      # New tab for "How to Use the App"
+      tabItem(
+        tabName = "howToUse",
+        fluidRow(
+          box(
+            title = "How to Use the App", 
+            status = "primary", 
+            solidHeader = TRUE, 
+            width = 12,
+            style = "padding: 0;",  # Remove padding to make video full width
+            tags$div(
+              style = "position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;",  # 16:9 aspect ratio
+              tags$iframe(
+                style = "position: absolute; top: 0; left: 0; width: 100%; height: 100%;",  # Full width and height
+                src = "https://www.youtube.com/embed/AtdDHpjFF3U",  # Replace with your YouTube video ID
+                frameborder = "0",
+                allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture",
+                allowfullscreen = TRUE
+              )
+            ),
+            p("This video provides a step-by-step guide on how to use the app.")  # Optional description
+          )
+        )
       )
     )
   )
@@ -281,11 +305,6 @@ ui <- dashboardPage(
 
 
 
-
-
-
-
-# Server Code
 server <- function(input, output, session) {
   # Show loading overlay
   shinyjs::show("loading-overlay")
@@ -314,6 +333,7 @@ server <- function(input, output, session) {
     shinyjs::hide("loading-overlay")
   })
   
+  ### New one 
   create_individual_plot <- function(data, x, y, error, color, title, y_title, is_grouped = FALSE, show_legend = FALSE) {
     y_range <- if(y_title == "Bias") c(0, 1.5) else c(0, 1)
     
@@ -328,19 +348,42 @@ server <- function(input, output, session) {
         barmode = "group",
         xaxis = list(title = "SNP Type", 
                      tickangle = 45, 
-                     tickfont = list(size = 8),
+                     tickfont = list(size = 12),  # Increase font size for x-axis labels
                      categoryorder = "array",
                      categoryarray = present_snp_types),
         yaxis = list(title = y_title, 
                      range = y_range,
-                     tickformat = ".2f"),
-        title = list(text = title, font = list(size = 12)),
-        margin = list(t = 30, b = 50, l = 50, r = 20)
+                     tickformat = ".2f",
+                     titlefont = list(size = 14)),  # Increase font size for y-axis title
+        title = list(text = title, font = list(size = 14)),  # Increase title font size
+        margin = list(t = 50, b = 100, l = 80, r = 20)  # Increase margins
       )
     
     return(p)
   }
   
+  create_grouped_plot <- function(data, x, y, error, color, title, y_title) {
+    y_range <- if (y_title == "Bias") c(0, 1.5) else c(0, 1)
+    
+    present_snp_types <- unique(data[[x]])
+    
+    p <- ggplot(data, aes(x = factor(get(x), levels = present_snp_types), y = get(y), fill = get(color))) +
+      geom_bar(stat = "identity", position = position_dodge()) +
+      geom_errorbar(aes(ymin = get(y) - get(error), ymax = get(y) + get(error)), 
+                    width = 0.2, position = position_dodge(0.9)) +
+      scale_fill_manual(values = custom_palette) +
+      labs(title = title, x = "SNP Type", y = y_title, fill = "Category") +
+      theme_minimal() +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.title = element_text(size = 14),
+        plot.title = element_text(size = 16, hjust = 0.5),
+        legend.position = "bottom"
+      ) +
+      facet_wrap(~trait, scales = "free_x")  # Facet by trait to create subplots
+    
+    return(p)
+  }
   metricPlot <- reactive({
     req(data(), input$snpTypeInput, input$traitInput, input$metricInput)
     
@@ -367,6 +410,7 @@ server <- function(input, output, session) {
     plot_list <- list()
     
     for (t in unique(plot_data$trait)) {
+        # Debug: Print the trait name
       trait_data <- plot_data %>% filter(trait == t)
       plot_list[[t]] <- create_individual_plot(
         trait_data, 
@@ -405,7 +449,7 @@ server <- function(input, output, session) {
     p %>% layout(autosize = TRUE)
   })
   
-  output$groupedPlot <- renderPlotly({
+  output$groupedPlot <- renderPlot({
     req(data(), input$snpGroupInput, input$groupMetricInput)
     
     selected_group <- switch(input$snpGroupInput,
@@ -420,8 +464,9 @@ server <- function(input, output, session) {
     
     if (nrow(filteredData) == 0 || !(y_col %in% colnames(filteredData))) {
       shinyjs::hide("loading-groupedPlot")
-      return(plotly_empty())
+      return(ggplot())
     }
+    
     
     plot_data <- filteredData %>%
       group_by(SNPtype, trait, Category) %>%
@@ -432,21 +477,18 @@ server <- function(input, output, session) {
         bias_se = sd(bias, na.rm = TRUE) / sqrt(n()),
         .groups = 'drop'
       )
-    
     plot_list <- list()
     
     for (t in unique(plot_data$trait)) {
       trait_data <- plot_data %>% filter(trait == t)
-      plot_list[[t]] <- create_individual_plot(
+      plot_list[[t]] <- create_grouped_plot(
         trait_data, 
         "SNPtype", 
         ifelse(y_col == "cor", "cor_mean", "bias_mean"),
         ifelse(y_col == "cor", "cor_se", "bias_se"),
         "Category", 
         t,
-        input$groupMetricInput,
-        is_grouped = TRUE,
-        show_legend = (t == unique(plot_data$trait)[1])
+        input$groupMetricInput
       )
     }
     
@@ -454,19 +496,18 @@ server <- function(input, output, session) {
     n_cols <- min(3, n_plots)
     n_rows <- ceiling(n_plots / n_cols)
     
-    p <- subplot(plot_list, nrows = n_rows, shareX = TRUE, shareY = TRUE, titleX = TRUE, titleY = TRUE) %>%
-      layout(
-        title = list(text = paste("Distribution of Mean", input$groupMetricInput, "by Functional Variant Type and Trait"),
-                     x = 0.5, y = 0.99, font = list(size = 16)),
-        showlegend = TRUE,
-        legend = list(orientation = "h", xanchor = "center", x = 0.5, y = -0.05, traceorder = "normal")
-      ) %>%
-      config(scrollZoom = FALSE, displayModeBar = FALSE)
-    
-    p$x$data <- unique(p$x$data)
+    p <- create_grouped_plot(
+      plot_data, 
+      "SNPtype", 
+      ifelse(y_col == "cor", "cor_mean", "bias_mean"),
+      ifelse(y_col == "cor", "cor_se", "bias_se"),
+      "Category", 
+      paste("Distribution of", input$groupMetricInput, "by SNP Type and Trait"),
+      input$groupMetricInput
+    )
     
     shinyjs::hide("loading-groupedPlot")
-    p %>% layout(autosize = TRUE)
+    return(p)
   })
   
   output$resultsTable <- renderDataTable({
@@ -544,7 +585,6 @@ server <- function(input, output, session) {
       return(NULL)
     })
   })
-  
   output$functionalVariantsTable <- renderDataTable({
     shinyjs::show("loading-functionalVariantsTable")
     
@@ -598,7 +638,6 @@ server <- function(input, output, session) {
       return(NULL)
     })
   })
-  
   text_content <- reactiveValues(
     intro = "Genomic selection has become an integral part of modern dairy cattle breeding programs. While traditionally relying on markers from SNP chips, recent research suggests that incorporating causal variants could enhance the accuracy of genomic prediction. This study explores the potential of using functional variants identified through various methodologies to improve genomic prediction accuracy in dairy cattle.",
     obj1 = "Assess the impact of functional sequence variants on genomic prediction accuracy for fat percentage, protein percentage, milk volume, fat yield, and protein yield in lactating dairy cattle.",
@@ -653,7 +692,9 @@ server <- function(input, output, session) {
   })
   
   output$dynamicGroupedPlotOutput <- renderUI({
-    plotlyOutput("groupedPlot", height = paste0(300 * ceiling(length(unique(data()$trait)) / 3) + 100, "px"))
+    n_traits <- length(unique(data()$trait))
+    plot_height <- 300 * ceiling(n_traits / 3) + 100  # Adjust height based on number of traits
+    plotOutput("groupedPlot", height = paste0(plot_height, "px"))
   })
 }
 # Run the application
