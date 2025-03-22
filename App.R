@@ -311,7 +311,7 @@ server <- function(input, output, session) {
   
   # Load the data
   data <- reactive({
-    df <- read.table("www/Massey_LIC_paper_result.txt", 
+    df <- read.table("www/Massey_LIC_paper_result.txt", # ## Note that please create directory www inside that put the result file Massey_LIC_paper_result.txt
                      header = TRUE, sep = " ", check.names = FALSE)
     df$trait <- factor(df$trait, levels = traitorder)
     df$SNPtype <- ifelse(df$SNPtype == "chipQTL", "chipseqQTL", df$SNPtype)
